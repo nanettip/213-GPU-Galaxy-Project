@@ -91,8 +91,8 @@ public:
   }
   
 private:
-  CUDA_CALLABLE_MEMBER double _x;
-  CUDA_CALLABLE_MEMBER double _y;
+ double _x;
+ double _y;
 };
 
 #endif

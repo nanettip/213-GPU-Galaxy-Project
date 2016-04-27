@@ -1,6 +1,11 @@
-ROOT     := .
-TARGETS  := galaxy
-CXXFLAGS := `sdl2-config --cflags` -g -O2 --std=c++11
-LDFLAGS  := `sdl2-config --libs` -lpthread
+NVCC := nvcc -arch sm_20 -g
+NVCC_FLAGS := -g `sdl2-config --cflags --libs`
 
-include $(ROOT)/common.mk
+all: galaxyGPU
+
+clean:
+	@rm -f galaxyGPU
+
+galaxyGPU: main.cu
+	$(NVCC) $(NVCC_FLAGS) -o galaxyGPU main.cu
+

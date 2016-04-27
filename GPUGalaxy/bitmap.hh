@@ -1,12 +1,11 @@
 #if !defined(BITMAP_HH)
 #define BITMAP_HH
 
-#include <atomic>
 #include <cassert>
 #include <cmath>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 struct rgb32 {
   uint8_t alpha;
@@ -38,7 +37,7 @@ public:
   void copy_to(void* dest) {
     memcpy(dest, _data, size());
   }
-  
+  /*
   // Disallow the copy constructor for bitmaps
   bitmap(const bitmap&) = delete;
   bitmap(bitmap&&) = delete;
@@ -46,7 +45,7 @@ public:
   // Disallow copying assignment for bitmaps
   bitmap& operator=(const bitmap&) = delete;
   bitmap& operator=(bitmap&&) = delete;
-  
+  */
   // Get the height of the bitmap
   size_t height() { return _height; }
   
