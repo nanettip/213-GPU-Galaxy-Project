@@ -36,6 +36,10 @@ void drawStar(bitmap* bmp, star s);
 void addRandomGalaxy(double center_x, double center_y);
 
 // A list of stars being simulated
+
+//LOOK UP THRUST CUDA TOOLKIT FOR THE VECTOR OF STARS
+
+
 vector<star> stars;
 
 // Offset of the current view
@@ -129,6 +133,9 @@ int main(int argc, char** argv) {
     }
     
     // Compute forces on all stars and update
+
+    //DO THIS ON GPU
+    
     updateStars();
     
     // Darken the bitmap instead of clearing it to leave trails
