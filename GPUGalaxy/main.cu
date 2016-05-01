@@ -66,6 +66,9 @@ int main(int argc, char** argv) {
   
   // Save the last time the mouse was clicked
   bool mouse_up = true;
+
+  thrust::host_vector<star> hostStars = stars;
+  thrust::device_vector<star> devStars = hostStars;
   
   // Loop until we get a quit event
   while(running) {
@@ -85,7 +88,7 @@ int main(int argc, char** argv) {
       // Only create one if the mouse button has been released
       if(mouse_up) {
         addRandomGalaxy(mouse_x - x_offset, mouse_y - y_offset);
-        
+
         // Don't create another one until the mouse button is released
         mouse_up = false;
       }
@@ -131,6 +134,9 @@ int main(int argc, char** argv) {
         continue;
       }
     }
+    
+    hostStars = stars;
+    devStars = hostStars;
     
     // Compute forces on all stars and update
 
@@ -196,6 +202,27 @@ void updateStars() {
   // Update positions and velocities given all accumulated forces
   for(int i=0; i<stars.size(); i++) {
     stars[i].update(DT);
+  }
+}
+
+__global__ void computeForce(thrust::device_vector<star>& stars) {
+  star s = stars[blockIdx.x];
+  for(int i = 0; i<stars.size(); i++) {
+    double m1 = s.mass();
+    double m2 = stars[i].mass();
+    double r1 = s.radius();
+    double r2 = stars[i].radius();
+
+    vec2d diff = s.pos() - stars[i].pos();
+
+    //MERGE FUNCTION COMING SOON
+
+    diff = diff.normalized();
+
+    vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
+
+    s.addForce(force);
+    stars[i].addForce(-force);
   }
 }
 
