@@ -1,6 +1,12 @@
 #if !defined(STAR_HH)
 #define STAR_HH
 
+#ifdef __CUDACC__
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
+#endif 
+
 #include <cmath>
 
 #include "vec2d.hh"
@@ -8,16 +14,16 @@
 class star {
 public:
   // Create a new star with a given position and velocity
-  star(double mass, vec2d pos, vec2d vel, rgb32 color) : 
-      _mass(mass),
-      _pos(pos),
-      _vel(vel),
-      _force(0, 0),
-      _color(color),
-      _initialized(false) {}
+  CUDA_CALLABLE_MEMBER star(double mass, vec2d pos, vec2d vel, rgb32 color) : 
+    _mass(mass),
+    _pos(pos),
+    _vel(vel),
+    _force(0, 0),
+    _color(color),
+    _initialized(false) {}
   
   // Update this star's position with a given force and a change in time
-  void update(double dt) {
+  CUDA_CALLABLE_MEMBER void update(double dt) {
     vec2d accel = _force / _mass;
     
     // Verlet integration
@@ -40,35 +46,35 @@ public:
   }
   
   // Add a force on this star
-  void addForce(vec2d force) {
+  CUDA_CALLABLE_MEMBER void addForce(vec2d force) {
     _force += force;
   }
   
   // Get the position of this star
-  vec2d pos() { return _pos; }
+  CUDA_CALLABLE_MEMBER vec2d pos() { return _pos; }
   
   // Get the velocity of this star
-  vec2d vel() { return _vel; }
+  CUDA_CALLABLE_MEMBER vec2d vel() { return _vel; }
   
   // Get the mass of this star
-  double mass() { return _mass; }
+  CUDA_CALLABLE_MEMBER double mass() { return _mass; }
   
   // Get the radius of this star
-  double radius() { return pow(_mass / 3.14, 0.33) / 4; }
+  CUDA_CALLABLE_MEMBER double radius() { return pow(_mass / 3.14, 0.33) / 4; }
   
   // Get the color of this star
-  rgb32 color() { return _color; }
+  CUDA_CALLABLE_MEMBER rgb32 color() { return _color; }
   
   // Merge two stars
-  star merge(star other) {
+  CUDA_CALLABLE_MEMBER star merge(star other) {
     double mass = _mass + other._mass;
     vec2d pos = (_pos * _mass + other._pos * other._mass) / (_mass + other._mass);
     vec2d vel = (_vel * _mass + other._vel * other._mass) / (_mass + other._mass);
     
     rgb32 color = rgb32(
-      ((double)_color.red*_mass + (double)other._color.red*other._mass) / (_mass + other._mass),
-      ((double)_color.green*_mass + (double)other._color.green*other._mass) / (_mass + other._mass),
-      ((double)_color.blue*_mass + (double)other._color.blue*other._mass) / (_mass + other._mass));
+                        ((double)_color.red*_mass + (double)other._color.red*other._mass) / (_mass + other._mass),
+                        ((double)_color.green*_mass + (double)other._color.green*other._mass) / (_mass + other._mass),
+                        ((double)_color.blue*_mass + (double)other._color.blue*other._mass) / (_mass + other._mass));
     
     return star(mass, pos, vel, color);
   }

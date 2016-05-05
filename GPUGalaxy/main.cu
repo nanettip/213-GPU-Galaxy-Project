@@ -11,6 +11,7 @@
 #include "util.hh"
 #include "vec2d.hh"
 
+#include <iostream>
 using namespace std;
 
 // Screen size
@@ -29,6 +30,10 @@ using namespace std;
 // Update all stars in the simulation
 void updateStars();
 
+__global__ void computeForce(star* stars);
+
+__global__ void updateStar(star*stars);
+
 // Draw a circle on a bitmap based on this star's position and radius
 void drawStar(bitmap* bmp, star s);
 
@@ -40,8 +45,8 @@ void addRandomGalaxy(double center_x, double center_y);
 //LOOK UP THRUST CUDA TOOLKIT FOR THE VECTOR OF STARS
 
 
+//vector<star> stars;
 vector<star> stars;
-
 // Offset of the current view
 int x_offset = 0;
 int y_offset = 0;
@@ -67,8 +72,7 @@ int main(int argc, char** argv) {
   // Save the last time the mouse was clicked
   bool mouse_up = true;
 
-  thrust::host_vector<star> hostStars = stars;
-  thrust::device_vector<star> devStars = hostStars;
+  star* starsGPU;
   
   // Loop until we get a quit event
   while(running) {
@@ -135,14 +139,40 @@ int main(int argc, char** argv) {
       }
     }
     
-    hostStars = stars;
-    devStars = hostStars;
-    
+    int starSize = stars.size();
     // Compute forces on all stars and update
+    star starsArray[starSize];
 
-    //DO THIS ON GPU
+    for(int i=0; i <starSize; i++) {
+    starsArray[i] = stars[i];
+    }
+
+
+    
+    if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starsGPU on GPU\n");
+        exit(2);
+      }
+    
+    if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starsGPU on GPU\n");
+        exit(2);
+      }
+
+    if(cudaMemcpy(starsGPU, starsArray, sizeof(star) * (stars.size()),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starsGPU to the GPU");
+      }
     
     updateStars();
+
+
+    cudaDeviceSynchronize();
+    cudaFree(starsGPU);
     
     // Darken the bitmap instead of clearing it to leave trails
     bmp.darken(0.92);
@@ -205,15 +235,18 @@ void updateStars() {
   }
 }
 
-__global__ void computeForce(thrust::device_vector<star>& stars) {
+__global__ void computeForce(star* stars, int starSize) {
   star s = stars[blockIdx.x];
-  for(int i = 0; i<stars.size(); i++) {
+  for(int i = 0; i<starSize; i++) {
+    star s2 = stars[i];
     double m1 = s.mass();
-    double m2 = stars[i].mass();
+    double m2 = s2.mass();
     double r1 = s.radius();
-    double r2 = stars[i].radius();
+    double r2 = s2.radius();
 
-    vec2d diff = s.pos() - stars[i].pos();
+    vec2d diff = s.pos() - s2.pos();
+
+    double dist = diff.magnitude();
 
     //MERGE FUNCTION COMING SOON
 
@@ -222,8 +255,13 @@ __global__ void computeForce(thrust::device_vector<star>& stars) {
     vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
 
     s.addForce(force);
-    stars[i].addForce(-force);
+    s2.addForce(-force);
   }
+}
+
+__global__ void updateStar(star* stars) {
+  star s = stars[blockIdx.x];
+  s.update(DT);
 }
 
 // Create a circle of stars moving in the same direction around the center of mass

@@ -1,6 +1,12 @@
 #if !defined(BITMAP_HH)
 #define BITMAP_HH
 
+#ifdef __CUDACC__
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
+#endif 
+
 #include <cassert>
 #include <cmath>
 #include <stdint.h>
@@ -13,9 +19,9 @@ struct rgb32 {
   uint8_t green;
   uint8_t red;
   
-  rgb32() : red(0), green(0), blue(0) {}
+  CUDA_CALLABLE_MEMBER rgb32() : red(0), green(0), blue(0) {}
   
-  rgb32(uint8_t r, uint8_t g, uint8_t b) : red(r), green(g), blue(b) {}
+  CUDA_CALLABLE_MEMBER rgb32(uint8_t r, uint8_t g, uint8_t b) : red(r), green(g), blue(b) {}
 };
 
 class bitmap {
