@@ -21,6 +21,8 @@ public:
     _force(0, 0),
     _color(color),
     _initialized(false) {}
+
+  star() {}
   
   // Update this star's position with a given force and a change in time
   CUDA_CALLABLE_MEMBER void update(double dt) {

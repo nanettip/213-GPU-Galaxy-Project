@@ -30,7 +30,7 @@ using namespace std;
 // Update all stars in the simulation
 void updateStars();
 
-__global__ void computeForce(star* stars);
+__global__ void computeForce(star* stars, int starSize);
 
 __global__ void updateStar(star*stars);
 
@@ -56,6 +56,9 @@ int y_offset = 0;
  * \param argc  The number of command line arguments
  * \param argv  An array of command line arguments
  */
+
+int starSize;
+
 int main(int argc, char** argv) {
   // Seed the random number generator
   srand(time(NULL));
@@ -139,7 +142,8 @@ int main(int argc, char** argv) {
       }
     }
     
-    int starSize = stars.size();
+    starSize = stars.size();
+
     // Compute forces on all stars and update
     star starsArray[starSize];
 
@@ -147,13 +151,6 @@ int main(int argc, char** argv) {
     starsArray[i] = stars[i];
     }
 
-
-    
-    if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
-      {
-        fprintf(stderr, "Failed to allocate starsGPU on GPU\n");
-        exit(2);
-      }
     
     if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
       {
@@ -168,18 +165,35 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Failed to copy starsGPU to the GPU");
       }
     
-    updateStars();
-
+    //updateStars();
+    
+    computeForce<<<starSize,1>>>(starsGPU, starSize);
 
     cudaDeviceSynchronize();
-    cudaFree(starsGPU);
     
+    updateStar<<<starSize,1>>>(starsGPU);
+
+    cudaDeviceSynchronize();
+
+
+    if(cudaMemcpy(&starsArray, starsGPU, sizeof(star) * (stars.size()),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starsGPU to the CPU\n");
+      }
+    
+    // for(int i=0; i <starSize; i++) {
+    //stars[i] = starsArray[i];
+    // }
+    
+    cudaFree(starsGPU);
+  
     // Darken the bitmap instead of clearing it to leave trails
     bmp.darken(0.92);
     
     // Draw stars
     for(int i=0; i<stars.size(); i++) {
-      drawStar(&bmp, stars[i]);
+      drawStar(&bmp, starsArray[i]);
     }
     
     // Display the rendered frame
