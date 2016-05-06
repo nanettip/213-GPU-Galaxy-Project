@@ -148,9 +148,9 @@ int main(int argc, char** argv) {
     star starsArray[starSize];
 
     for(int i=0; i <starSize; i++) {
-    starsArray[i] = stars[i];
+      starsArray[i] = stars[i];
     }
-
+    printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
     
     if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
       {
@@ -181,10 +181,10 @@ int main(int argc, char** argv) {
       {
         fprintf(stderr, "Failed to copy starsGPU to the CPU\n");
       }
-    
-    // for(int i=0; i <starSize; i++) {
-    //stars[i] = starsArray[i];
-    // }
+    printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());    
+    for(int i=0; i <starSize; i++) {
+      stars[i] = starsArray[i];
+    }
     
     cudaFree(starsGPU);
   
@@ -193,7 +193,7 @@ int main(int argc, char** argv) {
     
     // Draw stars
     for(int i=0; i<stars.size(); i++) {
-      drawStar(&bmp, starsArray[i]);
+      drawStar(&bmp, stars[i]);
     }
     
     // Display the rendered frame
@@ -202,7 +202,7 @@ int main(int argc, char** argv) {
   
   return 0;
 }
-
+/*
 // Compute force on all stars and update their positions
 void updateStars() {
   // Compute force on all stars
@@ -235,7 +235,7 @@ void updateStars() {
       
         // Compute the force between these two stars
         vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
-      
+
         // Apply the force to both stars
         stars[i].addForce(force);
         stars[j].addForce(-force);
@@ -248,14 +248,15 @@ void updateStars() {
     stars[i].update(DT);
   }
 }
-
+*/
 __global__ void computeForce(star* stars, int starSize) {
   star s = stars[blockIdx.x];
-  for(int i = 0; i<starSize; i++) {
+  double m1 = s.mass();
+  double r1 = s.radius();
+  
+  for(int i = blockIdx.x + 1; i<starSize; i++) {
     star s2 = stars[i];
-    double m1 = s.mass();
     double m2 = s2.mass();
-    double r1 = s.radius();
     double r2 = s2.radius();
 
     vec2d diff = s.pos() - s2.pos();
@@ -267,15 +268,21 @@ __global__ void computeForce(star* stars, int starSize) {
     diff = diff.normalized();
 
     vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
-
+    
+    printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+    
     s.addForce(force);
     s2.addForce(-force);
   }
+  
+  printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
 }
 
 __global__ void updateStar(star* stars) {
   star s = stars[blockIdx.x];
+  //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
   s.update(DT);
+  //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
 }
 
 // Create a circle of stars moving in the same direction around the center of mass

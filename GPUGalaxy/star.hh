@@ -66,6 +66,8 @@ public:
   
   // Get the color of this star
   CUDA_CALLABLE_MEMBER rgb32 color() { return _color; }
+
+  CUDA_CALLABLE_MEMBER vec2d force() { return _force; }
   
   // Merge two stars
   CUDA_CALLABLE_MEMBER star merge(star other) {
