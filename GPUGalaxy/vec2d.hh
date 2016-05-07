@@ -82,7 +82,7 @@ public:
   
   // Compute the magnitude of this vector
   CUDA_CALLABLE_MEMBER double magnitude() {
-    return sqrt(pow(_x, 2) + pow(_y, 2));
+    return sqrtf((_x * _x) + (_y * _y));
   }
   
   // Compute a normalized version of this vector

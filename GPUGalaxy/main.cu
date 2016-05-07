@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
     for(int i=0; i <starSize; i++) {
       starsArray[i] = stars[i];
     }
-    printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
+    // printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
     
     if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
       {
@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
       {
         fprintf(stderr, "Failed to copy starsGPU to the CPU\n");
       }
-    printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());    
+    //printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());    
     for(int i=0; i <starSize; i++) {
       stars[i] = starsArray[i];
     }
@@ -252,12 +252,12 @@ void updateStars() {
 __global__ void computeForce(star* stars, int starSize) {
   star s = stars[blockIdx.x];
   double m1 = s.mass();
-  double r1 = s.radius();
+  //double r1 = s.radius();
   
   for(int i = blockIdx.x + 1; i<starSize; i++) {
     star s2 = stars[i];
     double m2 = s2.mass();
-    double r2 = s2.radius();
+    //double r2 = s2.radius();
 
     vec2d diff = s.pos() - s2.pos();
 
@@ -267,15 +267,15 @@ __global__ void computeForce(star* stars, int starSize) {
 
     diff = diff.normalized();
 
-    vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
+    vec2d force = -diff * G * m1 * m2 / (dist * dist);
     
-    printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+    // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
     
     s.addForce(force);
     s2.addForce(-force);
   }
   
-  printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+  // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
 }
 
 __global__ void updateStar(star* stars) {
