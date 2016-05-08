@@ -11,6 +11,9 @@
 #include "util.hh"
 #include "vec2d.hh"
 
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+
 #include <iostream>
 using namespace std;
 
@@ -30,9 +33,24 @@ using namespace std;
 // Update all stars in the simulation
 void updateStars();
 
-__global__ void computeForce(star* stars, int starSize);
+//Template structure to pass device vector to kernel
+//https://codeyarns.com/2011/04/09/how-to-pass-thrust-device-vector-to-kernel/
+struct KernelArray
+{
+    star*  _array;
+    int _size;
+};
 
-__global__ void updateStar(star*stars);
+KernelArray convertToKernel(thrust::device_vector<star>& deviceStar);
+
+
+//CUDA compute forces and update all stars
+__global__ void computeForce(KernelArray stars, int starSize);
+
+
+__global__ void updateStar(KernelArray stars);
+
+
 
 // Draw a circle on a bitmap based on this star's position and radius
 void drawStar(bitmap* bmp, star s);
@@ -75,7 +93,7 @@ int main(int argc, char** argv) {
   // Save the last time the mouse was clicked
   bool mouse_up = true;
 
-  star* starsGPU;
+  //star* starsGPU;
   
   // Loop until we get a quit event
   while(running) {
@@ -145,13 +163,19 @@ int main(int argc, char** argv) {
     starSize = stars.size();
 
     // Compute forces on all stars and update
-    star starsArray[starSize];
-
-    for(int i=0; i <starSize; i++) {
-      starsArray[i] = stars[i];
-    }
-    // printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
     
+    //    star starsArray[starSize];
+    
+    // Thrust vector
+    thrust::host_vector<star> hostStars(starSize);
+    
+    for(int i=0; i <starSize; i++) {
+      //starsArray[i] = stars[i];
+      hostStars[i] = stars[i];
+    }
+    
+    // printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
+    /*
     if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
       {
         fprintf(stderr, "Failed to allocate starsGPU on GPU\n");
@@ -164,29 +188,36 @@ int main(int argc, char** argv) {
       {
         fprintf(stderr, "Failed to copy starsGPU to the GPU");
       }
-    
-    //updateStars();
-    
-    computeForce<<<starSize,1>>>(starsGPU, starSize);
+    */
 
-    cudaDeviceSynchronize();
-    
-    updateStar<<<starSize,1>>>(starsGPU);
+    thrust::device_vector<star> deviceStars = hostStars;
 
+    computeForce<<<starSize,1>>>(convertToKernel(deviceStars), starSize);
+    
     cudaDeviceSynchronize();
 
+    updateStar<<<starSize,1>>>(convertToKernel(deviceStars));
+    
+    cudaDeviceSynchronize();
 
+    /*
     if(cudaMemcpy(&starsArray, starsGPU, sizeof(star) * (stars.size()),
                   cudaMemcpyDeviceToHost) != cudaSuccess)
       {
         fprintf(stderr, "Failed to copy starsGPU to the CPU\n");
       }
+
+    */
+
+    //Copy back to host
+    hostStars = deviceStars;
+    
     //printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());    
     for(int i=0; i <starSize; i++) {
-      stars[i] = starsArray[i];
+      stars[i] = hostStars[i];
     }
     
-    cudaFree(starsGPU);
+    //cudaFree(starsGPU);
   
     // Darken the bitmap instead of clearing it to leave trails
     bmp.darken(0.92);
@@ -249,13 +280,23 @@ void updateStars() {
   }
 }
 */
-__global__ void computeForce(star* stars, int starSize) {
-  star s = stars[blockIdx.x];
+
+//Convert device_vector to KernelArray
+KernelArray convertToKernel(thrust::device_vector<star>& deviceStar){
+  KernelArray kArray;
+  kArray._array = thrust::raw_pointer_cast(&deviceStar[0]);
+  kArray._size = (int) deviceStar.size();
+
+  return kArray;
+}
+
+__global__ void computeForce(KernelArray stars, int starSize){
+  star s = stars._array[blockIdx.x];
   double m1 = s.mass();
   //double r1 = s.radius();
   
   for(int i = blockIdx.x + 1; i<starSize; i++) {
-    star s2 = stars[i];
+    star s2 = stars._array[i];
     double m2 = s2.mass();
     //double r2 = s2.radius();
 
@@ -270,16 +311,17 @@ __global__ void computeForce(star* stars, int starSize) {
     vec2d force = -diff * G * m1 * m2 / (dist * dist);
     
     // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+    //printf("%f %f\n", force.x(), force.y());
     
     s.addForce(force);
     s2.addForce(-force);
+
+    //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
   }
-  
-  // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
 }
 
-__global__ void updateStar(star* stars) {
-  star s = stars[blockIdx.x];
+__global__ void updateStar(KernelArray stars) {
+  star s = stars._array[blockIdx.x];
   //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
   s.update(DT);
   //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
