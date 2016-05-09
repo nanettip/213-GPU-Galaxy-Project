@@ -33,23 +33,16 @@ using namespace std;
 // Update all stars in the simulation
 void updateStars();
 
-//Template structure to pass device vector to kernel
-//https://codeyarns.com/2011/04/09/how-to-pass-thrust-device-vector-to-kernel/
-struct KernelArray
-{
-    star*  _array;
-    int _size;
-};
-
-KernelArray convertToKernel(thrust::device_vector<star>& deviceStar);
-
 
 //CUDA compute forces and update all stars
-__global__ void computeForce(KernelArray stars, int starSize);
+//__global__ void computeForce(KernelArray stars, int starSize);
+void computeForce
+(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize);
 
-
-__global__ void updateStar(KernelArray stars);
-
+//__global__ void updateStar(KernelArray stars);
+void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
+                double* forceX, double* forceY, double* velX, double* velY, int* initialized,
+                int starSize);
 
 
 // Draw a circle on a bitmap based on this star's position and radius
@@ -161,20 +154,32 @@ int main(int argc, char** argv) {
     }
     
     starSize = stars.size();
-
-    // Compute forces on all stars and update
     
-    //    star starsArray[starSize];
-    
-    // Thrust vector
-    thrust::host_vector<star> hostStars(starSize);
+    double starMass[starSize];
+    double starPosX[starSize];
+    double starPrevX[starSize];
+    double starForceX[starSize];
+    double starVelX[starSize];
+    double starPosY[starSize];
+    double starPrevY[starSize];
+    double starForceY[starSize];
+    double starVelY[starSize];    
+    int starInit[starSize];
     
     for(int i=0; i <starSize; i++) {
-      //starsArray[i] = stars[i];
-      hostStars[i] = stars[i];
+      starMass[i] = stars[i].mass();
+      starPosX[i] = stars[i].pos().x();
+      starPrevX[i] = stars[i].prev_pos().x();
+      starForceX[i] = stars[i].force().x();
+      starVelX[i] = stars[i].vel().x();
+      starPosY[i] = stars[i].pos().y();
+      starPrevY[i] = stars[i].prev_pos().y();
+      starForceY[i] = stars[i].force().y();
+      starVelY[i] = stars[i].vel().y();
+      starInit[i] = stars[i].initialized();
     }
     
-    // printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());
+
     /*
     if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
       {
@@ -188,9 +193,6 @@ int main(int argc, char** argv) {
       {
         fprintf(stderr, "Failed to copy starsGPU to the GPU");
       }
-    */
-
-    thrust::device_vector<star> deviceStars = hostStars;
 
     computeForce<<<starSize,1>>>(convertToKernel(deviceStars), starSize);
     
@@ -200,7 +202,6 @@ int main(int argc, char** argv) {
     
     cudaDeviceSynchronize();
 
-    /*
     if(cudaMemcpy(&starsArray, starsGPU, sizeof(star) * (stars.size()),
                   cudaMemcpyDeviceToHost) != cudaSuccess)
       {
@@ -208,13 +209,14 @@ int main(int argc, char** argv) {
       }
 
     */
-
-    //Copy back to host
-    hostStars = deviceStars;
+    computeForce(starMass, starPosX, starPosY, starForceX, starForceY, starSize);
+    updateStar(starMass, starPosX, starPosY, starPrevX,
+               starPrevY, starForceX, starForceY, starVelX, starVelY, starInit, starSize);
     
-    //printf("%f %f\n", starsArray[0].pos().x(), starsArray[0].pos().y());    
+
     for(int i=0; i <starSize; i++) {
-      stars[i] = hostStars[i];
+    stars[i].changePos(vec2d(starPosX[i], starPosY[i]));
+    stars[i].changePrev(vec2d(starPrevX[i], starPrevY[i])); 
     }
     
     //cudaFree(starsGPU);
@@ -281,50 +283,73 @@ void updateStars() {
 }
 */
 
-//Convert device_vector to KernelArray
-KernelArray convertToKernel(thrust::device_vector<star>& deviceStar){
-  KernelArray kArray;
-  kArray._array = thrust::raw_pointer_cast(&deviceStar[0]);
-  kArray._size = (int) deviceStar.size();
 
-  return kArray;
-}
-
-__global__ void computeForce(KernelArray stars, int starSize){
-  star s = stars._array[blockIdx.x];
-  double m1 = s.mass();
-  //double r1 = s.radius();
+void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize){
+  for(int i = 0; i<starSize; i++){
+    double m1 = mass[i];
+    vec2d pos = vec2d(posX[i], posY[i]);
   
-  for(int i = blockIdx.x + 1; i<starSize; i++) {
-    star s2 = stars._array[i];
-    double m2 = s2.mass();
-    //double r2 = s2.radius();
-
-    vec2d diff = s.pos() - s2.pos();
-
-    double dist = diff.magnitude();
-
-    //MERGE FUNCTION COMING SOON
-
-    diff = diff.normalized();
-
-    vec2d force = -diff * G * m1 * m2 / (dist * dist);
+    for(int j = i + 1; j<starSize; j++) {
+      double m2 = mass[j];
+      vec2d pos2 = vec2d(posX[j], posY[j]);
     
-    // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
-    //printf("%f %f\n", force.x(), force.y());
-    
-    s.addForce(force);
-    s2.addForce(-force);
+      vec2d diff = pos - pos2;
 
-    //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
+      double dist = diff.magnitude();
+
+      //MERGE FUNCTION COMING SOON
+
+      diff = diff.normalized();
+
+      vec2d force = -diff * G * m1 * m2 / (dist * dist);
+    
+      // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+      //printf("%f %f\n", force.x(), force.y());
+    
+      forceX[i] = force.x();
+      forceY[i] = force.y();
+      forceX[j] = (-force.x());
+      forceY[j] = (-force.y());
+
+      //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
+    }
   }
 }
 
-__global__ void updateStar(KernelArray stars) {
-  star s = stars._array[blockIdx.x];
-  //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
-  s.update(DT);
-  //printf("%f %f\n", stars[0].pos().x(), stars[0].pos().y());
+void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
+                double* forceX, double* forceY, double* velX, double* velY, int* initialized,
+                int starSize){
+  for(int i = 0; i<starSize; i++) {
+    vec2d pos = vec2d(posX[i], posY[i]);
+    vec2d prev_pos = vec2d(prev_posX[i], prev_posY[i]);
+    vec2d force = vec2d(forceX[i], forceY[i]);
+    vec2d vel = vec2d(velX[i], velY[i]);
+  
+    vec2d accel = force / mass[i];
+  
+    if(!initialized[i]) {
+      vec2d next_pos = pos + vel * DT + accel / 2 * DT * DT;
+      prev_pos = pos;
+      pos = next_pos;
+      initialized[i] = true;
+    } else {
+      vec2d next_pos = pos * 2 - prev_pos + accel * DT * DT;
+      prev_pos = pos;
+      pos = next_pos;
+    }
+
+    posX[i] = pos.x();
+    posY[i] = pos.y();
+    prev_posX[i] = prev_pos.x();
+    prev_posY[i] = prev_pos.y();
+  
+    vel += accel * DT;
+    velX[i] = vel.x();
+    velY[i] = vel.y();
+  
+    forceX[i] = 0;
+    forceY[i] = 0;
+  }
 }
 
 // Create a circle of stars moving in the same direction around the center of mass

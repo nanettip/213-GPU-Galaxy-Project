@@ -74,9 +74,9 @@ public:
     _y /= scalar;
     return *this;
   }
-  
+
   // Compute the dot product of this vector with another vector
-  double operator*(const vec2d& other) {
+  CUDA_CALLABLE_MEMBER double operator*(const vec2d& other) {
     return _x*other._x + _y*other._y;
   }
   

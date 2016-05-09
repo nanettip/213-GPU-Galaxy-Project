@@ -20,7 +20,7 @@ public:
     _vel(vel),
     _force(0, 0),
     _color(color),
-    _initialized(false) {}
+    _initialized(0) {}
 
   star() {}
   
@@ -29,11 +29,11 @@ public:
     vec2d accel = _force / _mass;
     
     // Verlet integration
-    if(!_initialized) { // First step: no previous position
+    if(_initialized == 0) { // First step: no previous position
       vec2d next_pos = _pos + _vel * dt + accel / 2 * dt * dt;
       _prev_pos = _pos;
       _pos = next_pos;
-      _initialized = true;
+      _initialized = 1;
     } else {  // Later steps: 
       vec2d next_pos = _pos * 2 - _prev_pos + accel * dt * dt;
       _prev_pos = _pos;
@@ -51,9 +51,18 @@ public:
   CUDA_CALLABLE_MEMBER void addForce(vec2d force) {
     _force += force;
   }
-  
+
+  void changePos(vec2d pos) {
+    _pos = pos;
+  }
+   void changePrev(vec2d pos) {
+    _prev_pos = pos;
+  }
   // Get the position of this star
   CUDA_CALLABLE_MEMBER vec2d pos() { return _pos; }
+
+  // Get the previous position of this star
+  CUDA_CALLABLE_MEMBER vec2d prev_pos() { return _prev_pos; }
   
   // Get the velocity of this star
   CUDA_CALLABLE_MEMBER vec2d vel() { return _vel; }
@@ -67,7 +76,11 @@ public:
   // Get the color of this star
   CUDA_CALLABLE_MEMBER rgb32 color() { return _color; }
 
+  // Get the force of this star
   CUDA_CALLABLE_MEMBER vec2d force() { return _force; }
+
+  //Get the initialized boolean of this star
+  CUDA_CALLABLE_MEMBER int initialized() { return _initialized; }
   
   // Merge two stars
   CUDA_CALLABLE_MEMBER star merge(star other) {
@@ -90,7 +103,7 @@ private:
   vec2d _vel;         // The velocity of this star
   vec2d _force;       // The accumulated force on this star
   rgb32 _color;       // The color of this star
-  bool _initialized;  // Has this particle been updated at least once?
+  int _initialized;  // Has this particle been updated at least once?
 };
 
 #endif
