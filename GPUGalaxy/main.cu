@@ -519,15 +519,10 @@ __global__ void computeForce(double* mass, double* posX, double* posY,
 
           vec2d force = -diff * G * m1 * m2 / (dist * dist);
     
-          // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
-          //printf("%f %f\n", force.x(), force.y());
-    
           forceX[blockIdx.x] += force.x();
           forceY[blockIdx.x] += force.y();
           forceX[j] += (-force.x());
           forceY[j] += (-force.y());
-
-          //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
         }
       }
     }
