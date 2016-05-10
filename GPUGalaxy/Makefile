@@ -6,6 +6,6 @@ all: galaxyGPU
 clean:
 	@rm -f galaxyGPU
 
-galaxyGPU: GPUTest.cu
+galaxyGPU: main.cu
 	$(NVCC) $(NVCC_FLAGS) -o galaxyGPU main.cu
 
