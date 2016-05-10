@@ -55,9 +55,19 @@ public:
   void changePos(vec2d pos) {
     _pos = pos;
   }
-   void changePrev(vec2d pos) {
+  void changePrev(vec2d pos) {
     _prev_pos = pos;
   }
+  void changeVel(vec2d vel){
+    _vel = vel;
+  }
+  void changeInit(int init) {
+    _initialized = init;
+  }
+  void changeMass(double mass){
+    _mass = mass;
+  }
+  
   // Get the position of this star
   CUDA_CALLABLE_MEMBER vec2d pos() { return _pos; }
 

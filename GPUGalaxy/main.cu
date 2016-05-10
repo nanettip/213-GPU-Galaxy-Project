@@ -35,15 +35,12 @@ void updateStars();
 
 
 //CUDA compute forces and update all stars
-//__global__ void computeForce(KernelArray stars, int starSize);
-void computeForce
-(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize);
 
-//__global__ void updateStar(KernelArray stars);
-void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
-                double* forceX, double* forceY, double* velX, double* velY, int* initialized,
-                int starSize);
+__global__ void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize, double* velX, double* velY, double* radius, int* merge);
 
+__global__ void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
+                           double* forceX, double* forceY, double* velX, double* velY, int* initialized,
+                           int starSize, int* merge);
 
 // Draw a circle on a bitmap based on this star's position and radius
 void drawStar(bitmap* bmp, star s);
@@ -165,6 +162,8 @@ int main(int argc, char** argv) {
     double starForceY[starSize];
     double starVelY[starSize];    
     int starInit[starSize];
+    double starRad[starSize];
+    int starMerge[starSize];
     
     for(int i=0; i <starSize; i++) {
       starMass[i] = stars[i].mass();
@@ -177,49 +176,278 @@ int main(int argc, char** argv) {
       starForceY[i] = stars[i].force().y();
       starVelY[i] = stars[i].vel().y();
       starInit[i] = stars[i].initialized();
+      starRad[i] = stars[i].radius();
+      starMerge[i] = i;
     }
     
-
-    /*
-    if(cudaMalloc(&starsGPU, sizeof(star) * (stars.size())) != cudaSuccess)
+    double* starMassGPU;
+    double* starPosXGPU;
+    double* starPrevXGPU;
+    double* starForceXGPU;
+    double* starVelXGPU;
+    double* starPosYGPU;
+    double* starPrevYGPU;
+    double* starForceYGPU;
+    double* starVelYGPU;    
+    int* starInitGPU;
+    double* starRadGPU;
+    int* starMergeGPU;
+    
+    
+    if(cudaMalloc(&starMassGPU, sizeof(double) * (starSize)) != cudaSuccess)
       {
-        fprintf(stderr, "Failed to allocate starsGPU on GPU\n");
+        fprintf(stderr, "Failed to allocate starMassGPU on GPU\n");
         exit(2);
       }
-
-    if(cudaMemcpy(starsGPU, starsArray, sizeof(star) * (stars.size()),
+    
+    if(cudaMalloc(&starPosXGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starPosXGPU on GPU\n");
+        exit(2);
+      }
+    
+    if(cudaMalloc(&starPrevXGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starPrevXGPU on GPU\n");
+        exit(2);
+      }
+        
+    if(cudaMalloc(&starForceXGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starForceXGPU on GPU\n");
+        exit(2);
+      }
+        
+    if(cudaMalloc(&starVelXGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starVelXGPU on GPU\n");
+        exit(2);
+      }
+        
+    if(cudaMalloc(&starPosYGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starPosYGPU on GPU\n");
+        exit(2);
+      }
+        
+    if(cudaMalloc(&starPrevYGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starPrevYGPU on GPU\n");
+        exit(2);
+      }
+            
+    if(cudaMalloc(&starForceYGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starForceYGPU on GPU\n");
+        exit(2);
+      }
+             
+    if(cudaMalloc(&starVelYGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starVelYGPU on GPU\n");
+        exit(2);
+      }
+             
+    if(cudaMalloc(&starInitGPU, sizeof(int) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starInitGPU on GPU\n");
+        exit(2);
+      }
+             
+    if(cudaMalloc(&starRadGPU, sizeof(double) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starRadGPU on GPU\n");
+        exit(2);
+      }
+              
+    if(cudaMalloc(&starMergeGPU, sizeof(int) * (starSize)) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to allocate starGPUGPU on GPU\n");
+        exit(2);
+      }   
+    //Copy the host data to device
+    
+    if(cudaMemcpy(starMassGPU, starMass, sizeof(double) * (starSize),
                   cudaMemcpyHostToDevice)
        != cudaSuccess)
       {
-        fprintf(stderr, "Failed to copy starsGPU to the GPU");
+        fprintf(stderr, "Failed to copy starMassGPU to the GPU");
+      }
+          
+    if(cudaMemcpy(starPosXGPU, starPosX, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPosXGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starPrevXGPU, starPrevX, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPrevXGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starForceXGPU, starForceX, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starForceXGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starVelXGPU, starVelX, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starVelXGPU to the GPU");
+      }
+    
+    if(cudaMemcpy(starPosYGPU, starPosY, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPosYGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starPrevYGPU, starPrevY, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPrevYGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starForceYGPU, starForceY, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starForceYGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starVelYGPU, starVelY, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starVelYGPU to the GPU");
+      }
+           
+    if(cudaMemcpy(starInitGPU, starInit, sizeof(int) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starInitGPU to the GPU");
+      }
+    
+    if(cudaMemcpy(starRadGPU, starRad, sizeof(double) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starRadGPU to the GPU");
+      }
+    
+     if(cudaMemcpy(starMergeGPU, starMerge, sizeof(int) * (starSize),
+                  cudaMemcpyHostToDevice)
+       != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starMergeGPU to the GPU");
       }
 
-    computeForce<<<starSize,1>>>(convertToKernel(deviceStars), starSize);
+     
+    computeForce<<<starSize,1>>>
+      (starMassGPU, starPosXGPU, starPosYGPU, starForceXGPU, starForceYGPU, starSize, starVelXGPU,
+       starVelYGPU, starRadGPU, starMergeGPU);
     
     cudaDeviceSynchronize();
-
-    updateStar<<<starSize,1>>>(convertToKernel(deviceStars));
+    
+    updateStar<<<starSize,1>>>(starMassGPU, starPosXGPU, starPosYGPU, starPrevXGPU,
+                               starPrevYGPU, starForceXGPU, starForceYGPU, starVelXGPU,
+                               starVelYGPU, starInitGPU, starSize, starMergeGPU);
     
     cudaDeviceSynchronize();
-
-    if(cudaMemcpy(&starsArray, starsGPU, sizeof(star) * (stars.size()),
+    
+    if(cudaMemcpy(&starMass, starMassGPU, sizeof(double) * (starSize),
                   cudaMemcpyDeviceToHost) != cudaSuccess)
       {
-        fprintf(stderr, "Failed to copy starsGPU to the CPU\n");
+        fprintf(stderr, "Failed to copy starMassGPU to the CPU\n");
       }
-
-    */
-    computeForce(starMass, starPosX, starPosY, starForceX, starForceY, starSize);
-    updateStar(starMass, starPosX, starPosY, starPrevX,
-               starPrevY, starForceX, starForceY, starVelX, starVelY, starInit, starSize);
+    if(cudaMemcpy(&starPosX, starPosXGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPosXGPU to the CPU\n");
+      }
+    if(cudaMemcpy(&starPrevX, starPrevXGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPrevXGPU to the CPU\n");
+      }
+    if(cudaMemcpy(&starVelX, starVelXGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starVelXGPU to the CPU\n");
+      }
+   if(cudaMemcpy(&starPosY, starPosYGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPosYGPU to the CPU\n");
+      }
+    if(cudaMemcpy(&starPrevY, starPrevYGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starPrevYGPU to the CPU\n");
+      }
+    if(cudaMemcpy(&starVelY, starVelYGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starVelYGPU to the CPU\n");
+      }
+    if(cudaMemcpy(&starInit, starInitGPU, sizeof(int) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starInitGPU to the CPU\n");
+      }
+     if(cudaMemcpy(&starRad, starRadGPU, sizeof(double) * (starSize),
+                  cudaMemcpyDeviceToHost) != cudaSuccess)
+      {
+        fprintf(stderr, "Failed to copy starRadGPU to the CPU\n");
+      }
+     if(cudaMemcpy(&starMerge, starMergeGPU, sizeof(int) * (starSize),
+                   cudaMemcpyDeviceToHost) != cudaSuccess)
+       {
+         fprintf(stderr, "Failed to copy starInitGPU to the CPU\n");
+       }   
+     
+    cudaFree(starMassGPU);
+    cudaFree(starPosXGPU);
+    cudaFree(starPrevXGPU);
+    cudaFree(starVelXGPU);
+    cudaFree( starForceXGPU);
+    cudaFree(starPosYGPU);
+    cudaFree(starPrevYGPU);
+    cudaFree(starForceYGPU);
+    cudaFree(starVelYGPU);    
+    cudaFree(starInitGPU);
+    cudaFree(starMergeGPU);
+    cudaFree(starRadGPU);
+    //computeForce(starMass, starPosX, starPosY, starForceX, starForceY, starSize);
+    //updateStar(starMass, starPosX, starPosY, starPrevX,
+    //           starPrevY, starForceX, starForceY, starVelX, starVelY, starInit, starSize);
     
-
-    for(int i=0; i <starSize; i++) {
-    stars[i].changePos(vec2d(starPosX[i], starPosY[i]));
-    stars[i].changePrev(vec2d(starPrevX[i], starPrevY[i])); 
+    int displacement = 0;
+    int j = 0;
+    for(int i=0; i <(starSize - displacement); i++) {
+      if(starMerge[j] == j) {
+        stars[i].changeMass(starMass[j]);
+        stars[i].changePos(vec2d(starPosX[j], starPosY[j]));
+        stars[i].changePrev(vec2d(starPrevX[j], starPrevY[j]));
+        stars[i].changeVel(vec2d(starVelX[j], starVelY[j]));
+        stars[i].changeInit(starInit[j]);
+      }
+      else {
+        stars.erase(stars.begin() + i);
+        i--;
+        displacement++;
+      }
+      j++;
     }
-    
-    //cudaFree(starsGPU);
   
     // Darken the bitmap instead of clearing it to leave trails
     bmp.darken(0.92);
@@ -283,7 +511,7 @@ void updateStars() {
 }
 */
 
-
+/*
 void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize){
   for(int i = 0; i<starSize; i++){
     double m1 = mass[i];
@@ -351,6 +579,91 @@ void updateStar(double* mass, double* posX, double* posY, double* prev_posX, dou
     forceY[i] = 0;
   }
 }
+*/
+__global__ void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize, double* velX, double* velY, double* radius, int* merge){
+  if(merge[blockIdx.x] == blockIdx.x) {
+    double m1 = mass[blockIdx.x];
+    vec2d pos = vec2d(posX[blockIdx.x], posY[blockIdx.x]);
+    vec2d vel = vec2d(velX[blockIdx.x], velY[blockIdx.x]);
+    for(int j = blockIdx.x + 1; j<starSize; j++) {
+      if(merge[j] == j) {
+        double m2 = mass[j];
+        vec2d pos2 = vec2d(posX[j], posY[j]);
+        vec2d vel2 = vec2d(velX[j], velY[j]);
+    
+        vec2d diff = pos - pos2;
+
+        double dist = diff.magnitude();
+        // If the objects are too close, merge them
+        if(dist < (radius[blockIdx.x] + radius[j]) / 1.5) {
+          merge[j] = blockIdx.x;
+          mass[blockIdx.x] = m1 + m2;
+          pos = (pos * m1 + pos2 * m2) / (m1 + m2);
+          vel = (vel * m1 + vel2 * m2) / (m1 + m2);
+          m1 = mass[blockIdx.x];
+          posX[blockIdx.x] = pos.x();
+          posY[blockIdx.x] = pos.y();
+          velX[blockIdx.x] = vel.x();
+          velY[blockIdx.x] = vel.y();
+        }
+        else{
+          diff = diff.normalized();
+
+          vec2d force = -diff * G * m1 * m2 / (dist * dist);
+    
+          // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
+          //printf("%f %f\n", force.x(), force.y());
+    
+          forceX[blockIdx.x] = force.x();
+          forceY[blockIdx.x] = force.y();
+          forceX[j] = (-force.x());
+          forceY[j] = (-force.y());
+
+          //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
+        }
+      }
+    }
+  }
+}
+
+
+__global__ void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
+                           double* forceX, double* forceY, double* velX, double* velY, int* initialized,
+                           int starSize, int* merge){
+  if(merge[blockIdx.x] == blockIdx.x) {
+    vec2d pos = vec2d(posX[blockIdx.x], posY[blockIdx.x]);
+    vec2d prev_pos = vec2d(prev_posX[blockIdx.x], prev_posY[blockIdx.x]);
+    vec2d force = vec2d(forceX[blockIdx.x], forceY[blockIdx.x]);
+    vec2d vel = vec2d(velX[blockIdx.x], velY[blockIdx.x]);
+  
+    vec2d accel = force / mass[blockIdx.x];
+  
+    if(!initialized[blockIdx.x]) {
+      vec2d next_pos = pos + vel * DT + accel / 2 * DT * DT;
+      prev_pos = pos;
+      pos = next_pos;
+      initialized[blockIdx.x] = true;
+    } else {
+      vec2d next_pos = pos * 2 - prev_pos + accel * DT * DT;
+      prev_pos = pos;
+      pos = next_pos;
+    }
+
+    posX[blockIdx.x] = pos.x();
+    posY[blockIdx.x] = pos.y();
+    prev_posX[blockIdx.x] = prev_pos.x();
+    prev_posY[blockIdx.x] = prev_pos.y();
+  
+    vel += accel * DT;
+    velX[blockIdx.x] = vel.x();
+    velY[blockIdx.x] = vel.y();
+  
+    forceX[blockIdx.x] = 0;
+    forceY[blockIdx.x] = 0;
+  }
+}
+
+
 
 // Create a circle of stars moving in the same direction around the center of mass
 void addRandomGalaxy(double center_x, double center_y) {
