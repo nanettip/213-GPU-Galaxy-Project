@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <ctime>
 #include <vector>
+#include <time.h>
 
 #include <SDL.h>
 
@@ -36,7 +37,7 @@ void updateStars();
 
 //CUDA compute forces and update all stars
 
-__global__ void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize, double* velX, double* velY, double* radius, int* merge);
+__global__ void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize, double* velX, double* velY, double* radius, int* merge, int* initialized);
 
 __global__ void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
                            double* forceX, double* forceY, double* velX, double* velY, int* initialized,
@@ -49,12 +50,8 @@ void drawStar(bitmap* bmp, star s);
 void addRandomGalaxy(double center_x, double center_y);
 
 // A list of stars being simulated
-
-//LOOK UP THRUST CUDA TOOLKIT FOR THE VECTOR OF STARS
-
-
-//vector<star> stars;
 vector<star> stars;
+
 // Offset of the current view
 int x_offset = 0;
 int y_offset = 0;
@@ -83,10 +80,21 @@ int main(int argc, char** argv) {
   // Save the last time the mouse was clicked
   bool mouse_up = true;
 
-  //star* starsGPU;
+  // Keep track of how many galaxies were made
+  int galaxies = 0;
+
+  // Count the number of frames
+  int numOfFrames = 0;
+  time_t startTime;
   
   // Loop until we get a quit event
   while(running) {
+
+    // Increment number of frames
+    numOfFrames++;
+
+    startTime = time_ms();
+    
     // Process events
     SDL_Event event;
     while(SDL_PollEvent(&event) == 1) {
@@ -103,7 +111,7 @@ int main(int argc, char** argv) {
       // Only create one if the mouse button has been released
       if(mouse_up) {
         addRandomGalaxy(mouse_x - x_offset, mouse_y - y_offset);
-
+        galaxies++;
         // Don't create another one until the mouse button is released
         mouse_up = false;
       }
@@ -353,14 +361,16 @@ int main(int argc, char** argv) {
 
      
     computeForce<<<starSize,1>>>
-      (starMassGPU, starPosXGPU, starPosYGPU, starForceXGPU, starForceYGPU, starSize, starVelXGPU,
-       starVelYGPU, starRadGPU, starMergeGPU);
+      (starMassGPU, starPosXGPU, starPosYGPU, starForceXGPU, starForceYGPU,
+       starSize, starVelXGPU, starVelYGPU, starRadGPU, starMergeGPU,
+       starInitGPU);
     
     cudaDeviceSynchronize();
     
-    updateStar<<<starSize,1>>>(starMassGPU, starPosXGPU, starPosYGPU, starPrevXGPU,
-                               starPrevYGPU, starForceXGPU, starForceYGPU, starVelXGPU,
-                               starVelYGPU, starInitGPU, starSize, starMergeGPU);
+    updateStar<<<starSize,1>>>(starMassGPU, starPosXGPU, starPosYGPU,
+                               starPrevXGPU, starPrevYGPU, starForceXGPU,
+                               starForceYGPU, starVelXGPU, starVelYGPU,
+                               starInitGPU, starSize, starMergeGPU);
     
     cudaDeviceSynchronize();
     
@@ -448,7 +458,7 @@ int main(int argc, char** argv) {
       }
       j++;
     }
-  
+
     // Darken the bitmap instead of clearing it to leave trails
     bmp.darken(0.92);
     
@@ -459,128 +469,23 @@ int main(int argc, char** argv) {
     
     // Display the rendered frame
     ui.display(bmp);
+
+    time_t endTime = time_ms();
+    time_t elapsedTime = endTime - startTime;
+
+    if (numOfFrames < 2000)
+      printf("%d, %d, %lu\n", galaxies, numOfFrames, elapsedTime);
   }
   
   return 0;
 }
-/*
-// Compute force on all stars and update their positions
-void updateStars() {
-  // Compute force on all stars
-  for(int i=0; i<stars.size(); i++) {
-    // Loop over all stars after this one
-    for(int j=i+1; j<stars.size(); j++) {
-      // Short names for important values
-      double m1 = stars[i].mass();
-      double m2 = stars[j].mass();
-      double r1 = stars[i].radius();
-      double r2 = stars[j].radius();
-      
-      // Compute a vector between the two points
-      vec2d diff = stars[i].pos() - stars[j].pos();
-      
-      // Compute the distance between the two points
-      double dist = diff.magnitude();
-      
-      // If the objects are too close, merge them
-      if(dist < (r1 + r2) / 1.5) {
-        // Replace the ith star with the merged one
-        stars[i] = stars[i].merge(stars[j]);
-        // Delete the jth star
-        stars.erase(stars.begin() + j);
-        j--;
-        
-      } else {
-        // Normalize the difference vector to be a unit vector
-        diff = diff.normalized();
-      
-        // Compute the force between these two stars
-        vec2d force = -diff * G * m1 * m2 / pow(dist, 2);
 
-        // Apply the force to both stars
-        stars[i].addForce(force);
-        stars[j].addForce(-force);
-      }
-    }
-  }
-  
-  // Update positions and velocities given all accumulated forces
-  for(int i=0; i<stars.size(); i++) {
-    stars[i].update(DT);
-  }
-}
-*/
 
-/*
-void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize){
-  for(int i = 0; i<starSize; i++){
-    double m1 = mass[i];
-    vec2d pos = vec2d(posX[i], posY[i]);
-  
-    for(int j = i + 1; j<starSize; j++) {
-      double m2 = mass[j];
-      vec2d pos2 = vec2d(posX[j], posY[j]);
-    
-      vec2d diff = pos - pos2;
 
-      double dist = diff.magnitude();
-
-      //MERGE FUNCTION COMING SOON
-
-      diff = diff.normalized();
-
-      vec2d force = -diff * G * m1 * m2 / (dist * dist);
-    
-      // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
-      //printf("%f %f\n", force.x(), force.y());
-    
-      forceX[i] = force.x();
-      forceY[i] = force.y();
-      forceX[j] = (-force.x());
-      forceY[j] = (-force.y());
-
-      //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
-    }
-  }
-}
-
-void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
-                double* forceX, double* forceY, double* velX, double* velY, int* initialized,
-                int starSize){
-  for(int i = 0; i<starSize; i++) {
-    vec2d pos = vec2d(posX[i], posY[i]);
-    vec2d prev_pos = vec2d(prev_posX[i], prev_posY[i]);
-    vec2d force = vec2d(forceX[i], forceY[i]);
-    vec2d vel = vec2d(velX[i], velY[i]);
-  
-    vec2d accel = force / mass[i];
-  
-    if(!initialized[i]) {
-      vec2d next_pos = pos + vel * DT + accel / 2 * DT * DT;
-      prev_pos = pos;
-      pos = next_pos;
-      initialized[i] = true;
-    } else {
-      vec2d next_pos = pos * 2 - prev_pos + accel * DT * DT;
-      prev_pos = pos;
-      pos = next_pos;
-    }
-
-    posX[i] = pos.x();
-    posY[i] = pos.y();
-    prev_posX[i] = prev_pos.x();
-    prev_posY[i] = prev_pos.y();
-  
-    vel += accel * DT;
-    velX[i] = vel.x();
-    velY[i] = vel.y();
-  
-    forceX[i] = 0;
-    forceY[i] = 0;
-  }
-}
-*/
-__global__ void computeForce(double* mass, double* posX, double* posY, double* forceX, double* forceY, int starSize, double* velX, double* velY, double* radius, int* merge){
+__global__ void computeForce(double* mass, double* posX, double* posY,
+                             double* forceX, double* forceY, int starSize,
+                             double* velX, double* velY, double* radius,
+                             int* merge, int* initialized){
   if(merge[blockIdx.x] == blockIdx.x) {
     double m1 = mass[blockIdx.x];
     vec2d pos = vec2d(posX[blockIdx.x], posY[blockIdx.x]);
@@ -605,6 +510,9 @@ __global__ void computeForce(double* mass, double* posX, double* posY, double* f
           posY[blockIdx.x] = pos.y();
           velX[blockIdx.x] = vel.x();
           velY[blockIdx.x] = vel.y();
+          forceX[blockIdx.x] = 0;
+          forceY[blockIdx.x] = 0;
+          initialized[blockIdx.x] = 0;
         }
         else{
           diff = diff.normalized();
@@ -614,10 +522,10 @@ __global__ void computeForce(double* mass, double* posX, double* posY, double* f
           // printf("%f %f\n", stars[0].force().x(), stars[0].force().y());
           //printf("%f %f\n", force.x(), force.y());
     
-          forceX[blockIdx.x] = force.x();
-          forceY[blockIdx.x] = force.y();
-          forceX[j] = (-force.x());
-          forceY[j] = (-force.y());
+          forceX[blockIdx.x] += force.x();
+          forceY[blockIdx.x] += force.y();
+          forceX[j] += (-force.x());
+          forceY[j] += (-force.y());
 
           //printf("%f %f\n\n", stars[0].force().x(), stars[0].force().y());
         }
@@ -627,9 +535,11 @@ __global__ void computeForce(double* mass, double* posX, double* posY, double* f
 }
 
 
-__global__ void updateStar(double* mass, double* posX, double* posY, double* prev_posX, double* prev_posY,
-                           double* forceX, double* forceY, double* velX, double* velY, int* initialized,
-                           int starSize, int* merge){
+__global__ void updateStar(double* mass, double* posX, double* posY,
+                           double* prev_posX, double* prev_posY,
+                           double* forceX, double* forceY, double* velX,
+                           double* velY, int* initialized, int starSize,
+                           int* merge){
   if(merge[blockIdx.x] == blockIdx.x) {
     vec2d pos = vec2d(posX[blockIdx.x], posY[blockIdx.x]);
     vec2d prev_pos = vec2d(prev_posX[blockIdx.x], prev_posY[blockIdx.x]);
@@ -638,11 +548,11 @@ __global__ void updateStar(double* mass, double* posX, double* posY, double* pre
   
     vec2d accel = force / mass[blockIdx.x];
   
-    if(!initialized[blockIdx.x]) {
+    if(initialized[blockIdx.x] == 0) {
       vec2d next_pos = pos + vel * DT + accel / 2 * DT * DT;
       prev_pos = pos;
       pos = next_pos;
-      initialized[blockIdx.x] = true;
+      initialized[blockIdx.x] = 1;
     } else {
       vec2d next_pos = pos * 2 - prev_pos + accel * DT * DT;
       prev_pos = pos;
